@@ -1,0 +1,143 @@
+#!/bin/bash
+#
+# This script is designed to be run inside the container
+#
+
+# /usr/share/oem/cloud-config.yml
+# fail hard and fast even on pipelines
+set -eo pipefail
+
+source config.sh
+export NAME_APP=${NAME_APP:noname}
+
+if [[ -z $1 ]]; then
+  # is not set $1
+  echo "Run : w-coreos install <WMvare Host> <CoreOS Host>"
+  echo "Example w-coreos install esxi/vmware01.sh host/test01.sh"
+  echo .........................................................
+  echo "Run : w-coreos deploy <WMvare Host> <CoreOS Host>"
+  echo "Example w-coreos deploy esxi/vmware01.sh host/test01.sh"
+  echo .........................................................
+  echo "Run : w-coreos clound <CoreOS Host>"
+  echo "Example w-coreos cloud host/test01.sh"
+  exit 1
+fi
+
+mkdir -p ./keys
+mkdir -p ./cloud-config
+
+if [[ ! -f ./keys/token ]]; then
+  echo "Generate token keys/token ..."
+  DISCOVERY_TOKEN_NEW=`curl -s https://discovery.etcd.io/new`
+  echo $DISCOVERY_TOKEN_NEW > ./keys/token
+  # DISCOVERY_TOKEN_FILE=
+fi
+
+
+
+if [[ $1 == "install" ]]; then
+  if [[ -z $2 ]]; then
+    echo "VMware Host is not set."
+    exit 1
+  fi
+  if [[ -z $3 ]]; then
+    echo "CoreOS Host is not set."
+    exit 1
+  fi
+  
+  WF=${2}
+  HF=${3}
+  if [[ ! -f $WF ]]; then
+    echo "File: ${WF} not exits..."
+    exit 1
+  fi
+  if [[ ! -f $HF ]]; then
+    echo "File: ${HF} not exits..."
+    exit 1
+  fi
+  source ${WF}
+  source ${HF}
+  
+  #chmod 0755 ./deploy_coreos_on_esxi.sh
+  scp ./${WF} ${VM_SSH}:${DATASTORE_PATH}/${VM_HOST_NAME}.sh
+  scp ./${HF} ${VM_SSH}:${DATASTORE_PATH}/${H_NAME}.sh
+  scp ./deploy_coreos_on_esxi.sh ${VM_SSH}:${DATASTORE_PATH}/
+  ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./deploy_coreos_on_esxi.sh ${VM_HOST_NAME} ${H_NAME}"
+
+  VM_INFO=`ssh ${VM_SSH} -C "vim-cmd vmsvc/getallvms | grep ${H_NAME}"`
+  VM_ID=`echo ${VM_INFO} | awk '{print $1}'`
+  echo Added VM_ID=${VM_ID} to ${HF}
+  echo "" >> ${HF}
+  echo "VM_ID=${VM_ID}" >> ${HF}
+  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${VM_HOST_NAME}.sh"  
+  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${H_NAME}.sh"  
+  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/deploy_coreos_on_esxi.sh"  
+  exit 1
+fi
+
+if [[ $1 == "deploy" ]]; then
+  if [[ -z $2 ]]; then
+    echo "VMware Host is not set."
+    exit 1
+  fi
+  if [[ -z $3 ]]; then
+    echo "CoreOS Host is not set."
+    exit 1
+  fi
+  
+  WF=${2}
+  HF=${3}
+  if [[ ! -f $WF ]]; then
+    echo "File: ${WF} not exits..."
+    exit 1
+  fi
+  if [[ ! -f $HF ]]; then
+    echo "File: ${HF} not exits..."
+    exit 1
+  fi
+  source ${WF}
+  source ${HF}
+  
+  if [[ ! -f insecure_ssh_key ]]; then
+    scp ${VM_SSH}:${DATASTORE_PATH}/${H_NAME}/insecure_ssh_key ./
+  fi
+  if [[ ! -f cloud-config/${H_NAME}.yml ]]; then
+    echo "File: cloud-config/${H_NAME}.yml not exits..."
+    exit 1
+  fi
+  scp -i insecure_ssh_key cloud-config/${H_NAME}.yml core@${H_IP} 
+  SSH_GET="ssh -i insecure_ssh_key core@${H_IP}"
+  #echo ${SSH_GET} -C "sudo mv /home/core/cloud-config.yml /usr/share/oem/cloud-config.yml"
+  # ssh -i insecure_ssh_key core@10.0.103.104
+  exit 1
+fi
+
+if [[ $1 == "cloud" ]]; then
+  if [[ -z $2 ]]; then
+    echo "CoreOS Host is not set."
+    exit 1
+  fi
+  HF=${2}
+  if [[ ! -f ${HF} ]]; then
+    echo "File: ${HF} not exits..."
+    exit 1
+  fi
+  source ${HF}
+  
+  if [[ ! -z ${DISCOVERY_TOKEN} ]]; then
+    DISCOVERY_TOKEN=`cat ./keys/token`
+  fi
+
+  source cloud_config.sh
+
+  exit 1
+fi
+
+if [[ $1 == "test" ]]; then
+  if [[ ! -z ${H_MAC} ]]; then
+    echo "ethernet0.addressType = \"static\""
+    echo "ethernet0.present = \"TRUE\""
+    echo "ethernet0.address = \"${H_MAC}\""
+  fi
+  exit 1
+fi
