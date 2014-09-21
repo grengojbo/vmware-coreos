@@ -1,8 +1,10 @@
 # CoreOS chanel stable|beta|alpha
 COREOS_CH=alpha
 # 
-#DISCOVERY_TOKEN= 
-
+# DISCOVERY_TOKEN=
+# KEY_FILE=
+KEY_PUB_FILE="keys/deis.pub"
+U_GITHUB=grengojbo
 H_NAME="test03"
 H_DOMAIN="uatv.me"
 H_IP="10.0.103.105"

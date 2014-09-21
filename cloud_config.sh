@@ -3,16 +3,26 @@
 cat > cloud-config/${H_NAME}.yml <<EOF
 #cloud-config
 
-hostname: coreos$1
+hostname: $H_NAME
 users:
   - name: core
-    coreos-ssh-import-github: grengojbo
+    coreos-ssh-import-github: $U_GITHUB
 coreos:
   units:
     - name: etcd.service
       command: start
     - name: fleet.service
       command: start
+    - name: fleet.socket
+      command: start
+      content: |
+        [Socket]
+        # Talk to the API over a Unix domain socket (default)
+        ListenStream=/var/run/fleet.sock
+        Service=fleet.service
+
+        [Install]
+        WantedBy=sockets.target
     - name: stop-update-engine.service
       command: start
       content: |
@@ -24,38 +34,44 @@ coreos:
         ExecStart=/usr/bin/systemctl stop update-engine.service
         ExecStartPost=/usr/bin/systemctl mask update-engine.service
   etcd:
-    name: coreos$1
+    name: $H_NAME
+    # generate a new token for each unique cluster from https://discovery.etcd.io/new
+    # uncomment the following line and replace it with your discovery URL
+    # discovery: https://discovery.etcd.io/12345693838asdfasfadf13939923
     discovery: $DISCOVERY_TOKEN
-    addr: $2:4001
-    peer-addr: $3:7001
+    addr: $H_IP:4001
+    peer-addr: $H_IP:7001
     # give etcd more time if it's under heavy load - prevent leader election thrashing
     peer-election-timeout: 2000
     # heartbeat interval should ideally be 1/4 or 1/5 of peer election timeout, but that's a long time...
-    peer-heartbeat-interval: 200
+    peer-heartbeat-interval: 500
     snapshot-count: 5000
   fleet:
-    public-ip: $2
+    # We have to set the public_ip here so this works on Vagrant -- otherwise, Vagrant VMs
+    # will all publish the same private IP. This is harmless for cloud providers.
+    public-ip: $H_IP
     #etcd-servers: http://10.0.7.235:4001,http://10.0.7.234:4001,http://10.0.7.233:4001
     #verbosity: 1
-    metadata: region=ua,deis=yes,node=no,server=hp01
+    # metadata: region=ua,deis=no,router=no,cluster=yes,server=hp01
+    metadata: region=ua,deis=no,router=no,cluster=yes,server=all
     etcd_request_timeout: 3
 write_files:
   - path: /etc/deis-release
     content: |
       DEIS_RELEASE=latest
   - path: /etc/environment
-    permissions: 0644
+    permissions: '0644'
     content: |
       COREOS_PUBLIC_IPV4=$2
       COREOS_PRIVATE_IPV4=$3
   - path: /etc/resolv.conf
-    permissions: 0644
+    permissions: '0644'
     content: |
-      nameserver 10.0.103.1
-      domain uatv.me
-      #nameserver 10.0.7.1
-      #domain uawifi.net.ua
+      nameserver $C_NAMESERVER
+      domain $H_DOMAIN
       options single-request
+  - path: /etc/motd
+    content: " \e[31m* *    \e[34m*   \e[32m*****    \e[39mddddd   eeeeeee iiiiiii   ssss\n\e[31m*   *  \e[34m* *  \e[32m*   *     \e[39md   d   e    e    i     s    s\n \e[31m* *  \e[34m***** \e[32m*****     \e[39md    d  e         i    s\n\e[32m*****  \e[31m* *    \e[34m*       \e[39md     d e         i     s\n\e[32m*   * \e[31m*   *  \e[34m* *      \e[39md     d eee       i      sss\n\e[32m*****  \e[31m* *  \e[34m*****     \e[39md     d e         i         s\n  \e[34m*   \e[32m*****  \e[31m* *      \e[39md    d  e         i          s\n \e[34m* *  \e[32m*   * \e[31m*   *     \e[39md   d   e    e    i    s    s\n\e[34m***** \e[32m*****  \e[31m* *     \e[39mddddd   eeeeeee iiiiiii  ssss\n\n\e[39mWelcome to Deis\t\t\tPowered by Core\e[38;5;45mO\e[38;5;206mS\e[39m\n"
   - path: /etc/profile.d/nse-function.sh
     permissions: '0755'
     content: |
@@ -63,7 +79,7 @@ write_files:
         sudo nsenter --pid --uts --mount --ipc --net --target \$(docker inspect --format="{{ .State.Pid }}" \$1)
       }
   - path: /run/deis/bin/get_image
-    permissions: 0755
+    permissions: '0755'
     content: |
       #!/bin/bash
       # usage: get_image <component_path>
@@ -85,5 +101,7 @@ write_files:
       # remove leading slash
       echo \${IMAGE#/}
 ssh_authorized_keys:
-  - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCyfTLw0YMOWDWl8/vTnTb7T85ll/9bsF8k53PDglz0qU/tivtOKBZ1COKAIekx9WqAE0U+oUWDiFsQqRDwN/6f3MYbjD/uY+0FDygudCY+LVIeeHlOR6RDWi8GKse8MOVnlrlxHTcKWxJkvmPVEUiKAOcgemusSfCwbVrvaEwNSAJHT18kNJZHdlYT+CaAle97td4JL2Yne4WezNLNQi+saxIj7+oPRvlGNkYt9nBS1smZuyJkZ9DKdq+DaK0Arwx1YZCyzgOkC2ynw9UT4QIlQDrvEdkmzYbZmvQLhkynbGlsDll51gqUmun5jVDV7+MbV1Zihdh/miZGuub9qNf1 deis
+  - $KEY_PUB
 EOF
+
+echo "Generate cloud-config/${H_NAME}.yml ..."
