@@ -8,7 +8,12 @@ users:
   - name: core
     coreos-ssh-import-github: $U_GITHUB
 coreos:
+  update:
+    reboot-strategy: off
   units:
+    #- name: docker.service
+    #  command: start
+    #  enable: yes
     - name: etcd.service
       command: start
     - name: fleet.service
@@ -33,6 +38,39 @@ coreos:
         Type=oneshot
         ExecStart=/usr/bin/systemctl stop update-engine.service
         ExecStartPost=/usr/bin/systemctl mask update-engine.service
+    - name: docker-tcp.socket
+      command: start
+      enable: yes
+      content: |
+        [Unit]
+        Description=Docker Socket for the API
+
+        [Socket]
+        ListenStream=2375
+        BindIPv6Only=both
+        Service=docker.service
+
+        [Install]
+        WantedBy=sockets.target
+    - name: enable-docker-tcp.service
+      command: start
+      content: |
+        [Unit]
+        Description=Enable the Docker Socket for the API
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/bin/systemctl enable docker-tcp.socket
+    - name: settimezone.service
+      command: start
+      content: |
+        [Unit]
+        Description=Set the timezone
+
+        [Service]
+        ExecStart=/usr/bin/timedatectl set-timezone $H_TZ
+        RemainAfterExit=yes
+        Type=oneshot
   etcd:
     name: $H_NAME
     # generate a new token for each unique cluster from https://discovery.etcd.io/new
@@ -40,6 +78,7 @@ coreos:
     # discovery: https://discovery.etcd.io/12345693838asdfasfadf13939923
     discovery: $DISCOVERY_TOKEN
     addr: $H_IP:4001
+    #bind-addr: 0.0.0.0:4001
     peer-addr: $H_IP:7001
     # give etcd more time if it's under heavy load - prevent leader election thrashing
     peer-election-timeout: 2000
@@ -100,8 +139,21 @@ write_files:
       
       # remove leading slash
       echo \${IMAGE#/}
+  - path: /etc/ntp.conf
+    content: |
+      # Common pool
+      server $NTP_SERVER1
+      server $NTP_SERVER2
+      server $NTP_SERVER3
+
+      # - Allow only time queries, at a limited rate.
+      # - Allow all local queries (IPv4, IPv6)
+      restrict default nomodify nopeer noquery limited kod
+      restrict 127.0.0.1
+      restrict [::1]
 ssh_authorized_keys:
   - $KEY_PUB
+manage_etc_hosts: localhost
 EOF
 
 echo "Generate cloud-config/${H_NAME}.yml ..."

@@ -1,0 +1,35 @@
+#!/bin/bash
+#
+# This script is designed to be run inside the container
+#
+
+# /usr/share/oem/cloud-config.yml
+# fail hard and fast even on pipelines
+set -eo pipefail
+
+help() {
+  echo "PowerOff CoreOS VM"
+  echo "Run : w-stop <CoreOS Host>"
+  echo "Example: w-stop host/test01.sh"
+  echo ............................................................
+}
+
+if [[ -z $1 ]]; then
+  # is not set $1
+  help
+fi
+
+HF=${1}
+if [[ ! -f ${HF} ]]; then
+  echo "File: ${HF} not exits..."
+  exit 1
+fi
+source ${HF}
+if [[ ! -f ${ESXI} ]]; then
+  echo "File: ${ESXI} not exits..."
+  exit 1
+fi
+source ${ESXI}
+echo "Connect to ${VM_HOST_NAME} ..."
+ssh ${VM_SSH} -C "vim-cmd vmsvc/power.off ${VM_ID}"
+echo "${VM_ID} Off..."

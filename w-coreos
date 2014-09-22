@@ -8,14 +8,22 @@
 set -eo pipefail
 
 help() {
+  echo "Install CoreOS to ESXI Host"
   echo "Run : w-coreos install <WMvare Host> <CoreOS Host>"
-  echo "Example w-coreos install esxi/vmware01.sh host/test01.sh"
-  echo .........................................................
-  echo "Run : w-coreos deploy <WMvare Host> <CoreOS Host>"
-  echo "Example w-coreos deploy esxi/vmware01.sh host/test01.sh"
-  echo .........................................................
+  echo "Example: w-coreos install esxi/vmware01.sh host/test01.sh"
+  echo ............................................................
   echo "Run : w-coreos clound <CoreOS Host>"
-  echo "Example w-coreos cloud host/test01.sh"
+  echo "Example: w-coreos cloud host/test01.sh"
+  echo ............................................................
+  echo "Run : w-coreos deploy <CoreOS Host>"
+  echo "Example: w-coreos deploy host/test01.sh"
+  echo ............................................................
+  echo "Run : w-coreos update <CoreOS Host>"
+  echo "Example: w-coreos update host/test01.sh"
+  echo ............................................................
+  echo "Run : w-coreos ssh <CoreOS Host>"
+  echo "Example: w-coreos ssh host/test01.sh"
+  echo ............................................................
   exit 1
 }
 if [[ -z $1 ]]; then
@@ -59,7 +67,6 @@ if [[ $1 == "install" ]]; then
   fi
   source ${WF}
   source ${HF}
-  
   #chmod 0755 ./deploy_coreos_on_esxi.sh
   scp ./${WF} ${VM_SSH}:${DATASTORE_PATH}/${VM_HOST_NAME}.sh
   scp ./${HF} ${VM_SSH}:${DATASTORE_PATH}/${H_NAME}.sh
@@ -70,6 +77,7 @@ if [[ $1 == "install" ]]; then
   VM_ID=`echo ${VM_INFO} | awk '{print $1}'`
   echo Added VM_ID=${VM_ID} to ${HF}
   echo "" >> ${HF}
+  echo "ESXI=\"${WF}\"" >> ${HF}
   echo "VM_ID=${VM_ID}" >> ${HF}
   ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${VM_HOST_NAME}.sh"  
   ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${H_NAME}.sh"  
@@ -79,27 +87,20 @@ fi
 
 if [[ $1 == "deploy" ]]; then
   if [[ -z $2 ]]; then
-    echo "VMware Host is not set."
-    exit 1
-  fi
-  if [[ -z $3 ]]; then
     echo "CoreOS Host is not set."
     exit 1
   fi
-  
-  WF=${2}
-  HF=${3}
-  if [[ ! -f $WF ]]; then
-    echo "File: ${WF} not exits..."
-    exit 1
-  fi
-  if [[ ! -f $HF ]]; then
+  HF=${2}
+  if [[ ! -f ${HF} ]]; then
     echo "File: ${HF} not exits..."
     exit 1
   fi
-  source ${WF}
   source ${HF}
-  
+  if [[ ! -f ${ESXI} ]]; then
+    echo "File: ${ESXI} not exits..."
+    exit 1
+  fi
+  source ${ESXI}
   if [[ ! -f insecure_ssh_key ]]; then
     scp ${VM_SSH}:${DATASTORE_PATH}/${H_NAME}/insecure_ssh_key ./
   fi
@@ -107,15 +108,48 @@ if [[ $1 == "deploy" ]]; then
     echo "File: cloud-config/${H_NAME}.yml not exits..."
     exit 1
   fi
-  echo "Connect to ${H_IP}"
-  scp -i insecure_ssh_key cloud-config/${H_NAME}.yml core@${H_IP}:/home/core/${H_NAME}.yml
+  echo "Connect to ${H_IP} ..."
   SSH_GET="ssh -i insecure_ssh_key core@${H_IP}"
+  cat cloud-config/${H_NAME}.yml | ${SSH_GET} "sudo cat > /usr/share/oem/cloud-config.yml"
+  # scp -i insecure_ssh_key cloud-config/${H_NAME}.yml core@${H_IP}:/home/core/${H_NAME}.yml
   echo "Deploy /usr/share/oem/cloud-config.yml ..."
-  ${SSH_GET} -C "sudo mv /home/core/${H_NAME}.yml /usr/share/oem/cloud-config.yml"
+  # ${SSH_GET} -C "sudo mv /home/core/${H_NAME}.yml /usr/share/oem/cloud-config.yml"
   echo "Reboot ${H_IP}"
   ${SSH_GET} -C "sudo reboot"
   # systemctl stop system-cloudinit@usr-share-oem-cloud\x2dconfig.yml.service
-  # ssh -i insecure_ssh_key core@10.0.103.104
+  exit 1
+fi
+
+if [[ $1 == "update" ]]; then
+  if [[ -z $2 ]]; then
+    echo "CoreOS Host is not set."
+    exit 1
+  fi
+  HF=${2}
+  if [[ ! -f $HF ]]; then
+    echo "File: ${HF} not exits..."
+    exit 1
+  fi
+  source ${HF}
+  if [[ ! -f cloud-config/${H_NAME}.yml ]]; then
+    echo "File: cloud-config/${H_NAME}.yml not exits..."
+    exit 1
+  fi
+  if [[ -f ${KEY_FILE} ]]; then
+    echo "Connect to ${H_IP}, key: ${KEY_FILE} ..."
+    SSH_GET="ssh -i ${KEY_FILE} core@${H_IP}"
+    # SCP_GET="scp -i ${KEY_FILE}"
+  else
+    echo "Connect to ${H_IP} ..."
+    SSH_GET="ssh core@${H_IP}"
+    # SCP_GET="scp"
+  fi
+  cat cloud-config/${H_NAME}.yml | ${SSH_GET} "sudo cat > /usr/share/oem/cloud-config.yml"
+  # ${SCP_GET} cloud-config/${H_NAME}.yml core@${H_IP}:/home/core/${H_NAME}.yml
+  # echo "Deploy /usr/share/oem/cloud-config.yml ..."
+  # ${SSH_GET} -C "sudo mv /home/core/${H_NAME}.yml /usr/share/oem/cloud-config.yml"
+  echo "Reboot ${H_IP}"
+  ${SSH_GET} -C "sudo reboot"
   exit 1
 fi
 
@@ -141,8 +175,32 @@ if [[ $1 == "cloud" ]]; then
   if [[ -z ${KEY_PUB} ]]; then
     KEY_PUB=`cat insecure_ssh_key.pub`
   fi
+  if [[ -z ${H_TZ} ]]; then
+    H_TZ="UTC"
+  fi
   # echo "KEY_PUB=$KEY_PUB"
   source cloud_config.sh
+  exit 1
+fi
+
+if [[ $1 == "ssh" ]]; then
+  if [[ -z $2 ]]; then
+    echo "CoreOS Host is not set."
+    exit 1
+  fi
+  HF=${2}
+  if [[ ! -f $HF ]]; then
+    echo "File: ${HF} not exits..."
+    exit 1
+  fi
+  source ${HF}
+  if [[ -f ${KEY_FILE} ]]; then
+    echo "Connect to ${H_IP}, key: ${KEY_FILE} ..."
+    ssh -i ${KEY_FILE} core@${H_IP}
+  else
+    echo "Connect to ${H_IP} ..."
+    ssh core@${H_IP}
+  fi
   exit 1
 fi
 
