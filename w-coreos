@@ -5,11 +5,13 @@
 
 # /usr/share/oem/cloud-config.yml
 # fail hard and fast even on pipelines
+# cat ~/.ssh/master.pub >> ~/.ssh/authorized_keys
 set -eo pipefail
 
 help() {
+  echo ............................................................
   echo "Install CoreOS to ESXI Host"
-  echo "Run : w-coreos install <WMvare Host> <CoreOS Host>"
+  echo "Run : w-coreos install <WMvare Host> <CoreOS Host> [cache]"
   echo "Example: w-coreos install esxi/vmware01.sh host/test01.sh"
   echo ............................................................
   echo "Run : w-coreos clound <CoreOS Host>"
@@ -43,8 +45,6 @@ if [[ ! -f ./keys/token ]]; then
   # DISCOVERY_TOKEN_FILE=
 fi
 
-
-
 if [[ $1 == "install" ]]; then
   if [[ -z $2 ]]; then
     echo "VMware Host is not set."
@@ -71,7 +71,11 @@ if [[ $1 == "install" ]]; then
   scp ./${WF} ${VM_SSH}:${DATASTORE_PATH}/${VM_HOST_NAME}.sh
   scp ./${HF} ${VM_SSH}:${DATASTORE_PATH}/${H_NAME}.sh
   scp ./deploy_coreos_on_esxi.sh ${VM_SSH}:${DATASTORE_PATH}/
-  ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./deploy_coreos_on_esxi.sh ${VM_HOST_NAME} ${H_NAME}"
+  if [[ -z $4 ]]; then
+    ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./deploy_coreos_on_esxi.sh ${VM_HOST_NAME} ${H_NAME}"
+  else
+    ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./deploy_coreos_on_esxi.sh ${VM_HOST_NAME} ${H_NAME} cache"
+  fi
 
   VM_INFO=`ssh ${VM_SSH} -C "vim-cmd vmsvc/getallvms | grep ${H_NAME}"`
   VM_ID=`echo ${VM_INFO} | awk '{print $1}'`
@@ -109,11 +113,17 @@ if [[ $1 == "deploy" ]]; then
     exit 1
   fi
   echo "Connect to ${H_IP} ..."
-  SSH_GET="ssh -i insecure_ssh_key core@${H_IP}"
-  cat cloud-config/${H_NAME}.yml | ${SSH_GET} "sudo cat > /usr/share/oem/cloud-config.yml"
-  # scp -i insecure_ssh_key cloud-config/${H_NAME}.yml core@${H_IP}:/home/core/${H_NAME}.yml
+  SSH_GET="ssh -i insecure_ssh_key -o StrictHostKeyChecking=no core@${H_IP}"
+  ${SSH_GET} -C "sudo mkdir -p /storage"
   echo "Deploy /usr/share/oem/cloud-config.yml ..."
-  # ${SSH_GET} -C "sudo mv /home/core/${H_NAME}.yml /usr/share/oem/cloud-config.yml"
+  cat cloud-config/${H_NAME}.yml | ${SSH_GET} "cat > /home/core/${H_NAME}.yml"
+  ${SSH_GET} -C "sudo mv /home/core/${H_NAME}.yml /usr/share/oem/cloud-config.yml"
+  if [[ ! -z ${KEY_FILE} ]]; then
+    scp -i insecure_ssh_key insecure_ssh_key core@${H_IP}:/home/core/.ssh/id_rsa
+  else
+    scp -i insecure_ssh_key ${KEY_FILE} core@${H_IP}:/home/core/.ssh/id_rsa
+  fi
+  ${SSH_GET} -C "sudo cp -R /home/core/.ssh /root/"
   echo "Reboot ${H_IP}"
   ${SSH_GET} -C "sudo reboot"
   # systemctl stop system-cloudinit@usr-share-oem-cloud\x2dconfig.yml.service
@@ -137,11 +147,11 @@ if [[ $1 == "update" ]]; then
   fi
   if [[ -f ${KEY_FILE} ]]; then
     echo "Connect to ${H_IP}, key: ${KEY_FILE} ..."
-    SSH_GET="ssh -i ${KEY_FILE} core@${H_IP}"
+    SSH_GET="ssh -i ${KEY_FILE} -o StrictHostKeyChecking=no core@${H_IP}"
     # SCP_GET="scp -i ${KEY_FILE}"
   else
     echo "Connect to ${H_IP} ..."
-    SSH_GET="ssh core@${H_IP}"
+    SSH_GET="ssh -o StrictHostKeyChecking=no core@${H_IP}"
     # SCP_GET="scp"
   fi
   cat cloud-config/${H_NAME}.yml | ${SSH_GET} "sudo cat > /usr/share/oem/cloud-config.yml"

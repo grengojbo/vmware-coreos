@@ -11,9 +11,6 @@ coreos:
   update:
     reboot-strategy: off
   units:
-    #- name: docker.service
-    #  command: start
-    #  enable: yes
     - name: etcd.service
       command: start
     - name: fleet.service
@@ -71,6 +68,26 @@ coreos:
         ExecStart=/usr/bin/timedatectl set-timezone $H_TZ
         RemainAfterExit=yes
         Type=oneshot
+    # - name: lsyncd.service
+    #   command: start
+    #   content: |
+    #     [Unit]
+    #     Description=lsyncd
+    #     After=docker.service
+    #     Requires=docker.service
+
+    #     [Service]
+    #     EnvironmentFile=/etc/environment
+    #     Restart=always
+    #     RestartSec=10s
+    #     ExecStartPre=-/usr/bin/docker kill lsyncd
+    #     ExecStartPre=-/usr/bin/docker rm lsyncd
+    #     ExecStartPre=/bin/sh -c "IMAGE=grengojbo/lsyncd; docker history $IMAGE >/dev/null 2>&1 || docker pull $IMAGE"
+    #     ExecStart=/usr/bin/docker run --rm -p 2022:22 -e PUBLISH=22 -e HOST=$COREOS_PRIVATE_IPV4 -e PORT=2022 -v /storage:/storage -v /root:/root --name lsyncd --privileged grengojbo/lsyncd
+    #     ExecStopPost=/usr/bin/docker stop lsyncd
+
+    #     [Install]
+    #     WantedBy=multi-user.target
   etcd:
     name: $H_NAME
     # generate a new token for each unique cluster from https://discovery.etcd.io/new
@@ -151,9 +168,27 @@ write_files:
       restrict default nomodify nopeer noquery limited kod
       restrict 127.0.0.1
       restrict [::1]
+  - path: /etc/ntp.conf
+    content: |
+      settings {
+        logfile    = "/var/log/lsyncd.log",
+        statusFile = "/var/log/lsyncd.status",
+        statusInterval = 10,
+        nodaemon   = true,
+      }
+
+      sync{
+        default.rsync,
+        source = "/storage",
+        target = "127.0.0.1:/storage/nodes",
+        delete = false,
+        maxProcesses = 4,
+        rsync = {
+          rsh = "/usr/bin/ssh -p 22 -o StrictHostKeyChecking=no",
+        }
+      }
 ssh_authorized_keys:
   - $KEY_PUB
-manage_etc_hosts: localhost
 EOF
 
 echo "Generate cloud-config/${H_NAME}.yml ..."

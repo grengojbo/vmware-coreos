@@ -31,25 +31,23 @@ VM_NAME=$2
 # Creates CoreOS VM Directory and change into it
 mkdir -p ${DATASTORE_PATH}/${VM_NAME}
 
-if [[ -z $3 ]]; then
-  echo "Cache image ${COREOS_CH} CoreOS disable."
+if [[ ! -z $3 ]]; then
+  echo "Cache image ${COREOS_CH} CoreOS enable."
   if [[ ! -f ${COREOS_CH}_coreos.zip ]]; then
-    # Download CoreOS 
+    echo "Download CoreOS ..." 
     wget ${CORE_OS_DOWNLOAD_URL}
     mv coreos_production_vmware_insecure.zip ${COREOS_CH}_coreos.zip
   fi
   cp ${COREOS_CH}_coreos.zip ${DATASTORE_PATH}/${VM_NAME}/coreos_production_vmware_insecure.zip 
-fi
-
-
-cd ${DATASTORE_PATH}/${VM_NAME}
-
-# Download CoreOS 
-if [[ ! -z $3 ]]; then
+else
+  cd ${DATASTORE_PATH}/${VM_NAME}
+  echo "Cache image ${COREOS_CH} CoreOS disable."
   wget ${CORE_OS_DOWNLOAD_URL}
 fi
 
-# Unzip CoreOS & remove file
+cd ${DATASTORE_PATH}/${VM_NAME}
+
+echo "Unzip CoreOS & remove file ..."
 unzip coreos_production_vmware_insecure.zip
 rm -f coreos_production_vmware_insecure.zip
 
