@@ -67,14 +67,14 @@ if [[ $1 == "install" ]]; then
   fi
   source ${WF}
   source ${HF}
-  #chmod 0755 ./deploy_coreos_on_esxi.sh
+  #chmod 0755 ./coreos_deploy_on_esxi.sh
   scp ./${WF} ${VM_SSH}:${DATASTORE_PATH}/${VM_HOST_NAME}.sh
   scp ./${HF} ${VM_SSH}:${DATASTORE_PATH}/${H_NAME}.sh
-  scp ./deploy_coreos_on_esxi.sh ${VM_SSH}:${DATASTORE_PATH}/
+  scp ./coreos_deploy_on_esxi.sh ${VM_SSH}:${DATASTORE_PATH}/
   if [[ -z $4 ]]; then
-    ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./deploy_coreos_on_esxi.sh ${VM_HOST_NAME} ${H_NAME}"
+    ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./coreos_deploy_on_esxi.sh ${VM_HOST_NAME} ${H_NAME}"
   else
-    ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./deploy_coreos_on_esxi.sh ${VM_HOST_NAME} ${H_NAME} cache"
+    ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./coreos_deploy_on_esxi.sh ${VM_HOST_NAME} ${H_NAME} cache"
   fi
 
   VM_INFO=`ssh ${VM_SSH} -C "vim-cmd vmsvc/getallvms | grep ${H_NAME}"`
@@ -85,7 +85,7 @@ if [[ $1 == "install" ]]; then
   echo "VM_ID=${VM_ID}" >> ${HF}
   ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${VM_HOST_NAME}.sh"  
   ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${H_NAME}.sh"  
-  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/deploy_coreos_on_esxi.sh"  
+  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/coreos_deploy_on_esxi.sh"  
   exit 1
 fi
 
@@ -206,19 +206,31 @@ if [[ $1 == "ssh" ]]; then
   source ${HF}
   if [[ -f ${KEY_FILE} ]]; then
     echo "Connect to ${H_IP}, key: ${KEY_FILE} ..."
-    ssh -i ${KEY_FILE} core@${H_IP}
+    ssh -i ${KEY_FILE} -o StrictHostKeyChecking=no core@${H_IP}
   else
     echo "Connect to ${H_IP} ..."
-    ssh core@${H_IP}
+    ssh -o StrictHostKeyChecking=no core@${H_IP}
   fi
   exit 1
 fi
 
-if [[ $1 == "test" ]]; then
-  if [[ ! -z ${H_MAC} ]]; then
-    echo "ethernet0.addressType = \"static\""
-    echo "ethernet0.present = \"TRUE\""
-    echo "ethernet0.address = \"${H_MAC}\""
+if [[ $1 == "toolbox" ]]; then
+  if [[ -z $2 ]]; then
+    echo "CoreOS Host is not set."
+    exit 1
+  fi
+  HF=${2}
+  if [[ ! -f $HF ]]; then
+    echo "File: ${HF} not exits..."
+    exit 1
+  fi
+  source ${HF}
+  if [[ -f ${KEY_FILE} ]]; then
+    echo "Connect to ${H_IP}, key: ${KEY_FILE} ..."
+    ssh -i ${KEY_FILE} -o StrictHostKeyChecking=no core@${H_IP} -C "/usr/bin/toolbox"
+  else
+    echo "Connect to ${H_IP} ..."
+    ssh -o StrictHostKeyChecking=no core@${H_IP} -C "/usr/bin/toolbox"
   fi
   exit 1
 fi
