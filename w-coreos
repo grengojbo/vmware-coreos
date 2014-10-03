@@ -11,11 +11,11 @@ set -eo pipefail
 help() {
   echo ............................................................
   echo "Install CoreOS to ESXI Host"
-  echo "Run : w-coreos install <WMvare Host> <CoreOS Host> [cache]"
+  echo "Run : w-coreos install <WMvare Host> <CoreOS Host> [cache|clean]"
   echo "Example: w-coreos install esxi/vmware01.sh host/test01.sh"
   echo ............................................................
-  echo "Run : w-coreos clound <CoreOS Host>"
-  echo "Example: w-coreos cloud host/test01.sh"
+  echo "Run : w-coreos gen <CoreOS Host>"
+  echo "Example: w-coreos gen host/test01.sh"
   echo ............................................................
   echo "Run : w-coreos deploy <CoreOS Host>"
   echo "Example: w-coreos deploy host/test01.sh"
@@ -74,7 +74,7 @@ if [[ $1 == "install" ]]; then
   if [[ -z $4 ]]; then
     ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./coreos_deploy_on_esxi.sh ${VM_HOST_NAME} ${H_NAME}"
   else
-    ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./coreos_deploy_on_esxi.sh ${VM_HOST_NAME} ${H_NAME} cache"
+    ssh ${VM_SSH} -C "cd ${DATASTORE_PATH}/ && ./coreos_deploy_on_esxi.sh ${VM_HOST_NAME} ${H_NAME} $4"
   fi
 
   VM_INFO=`ssh ${VM_SSH} -C "vim-cmd vmsvc/getallvms | grep ${H_NAME}"`
@@ -163,7 +163,7 @@ if [[ $1 == "update" ]]; then
   exit 1
 fi
 
-if [[ $1 == "cloud" ]]; then
+if [[ $1 == "gen" ]]; then
   if [[ -z $2 ]]; then
     echo "CoreOS Host is not set."
     exit 1
@@ -189,6 +189,9 @@ if [[ $1 == "cloud" ]]; then
     H_TZ="UTC"
   fi
   # echo "KEY_PUB=$KEY_PUB"
+  if [[ -z $H_METADATA ]]; then
+    H_METADATA="region=ua,deis=no,router=no,cluster=yes,server=vmware02,host=$H_NAME"
+  fi
   source cloud_config.sh
   exit 1
 fi

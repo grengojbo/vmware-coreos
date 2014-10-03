@@ -11,6 +11,9 @@ coreos:
   update:
     reboot-strategy: off
   units:
+    #- name: docker.service
+    #  command: start
+    #  enable: yes
     - name: etcd.service
       command: start
     - name: fleet.service
@@ -89,7 +92,7 @@ coreos:
     #etcd-servers: http://10.0.7.235:4001,http://10.0.7.234:4001,http://10.0.7.233:4001
     #verbosity: 1
     # metadata: region=ua,deis=no,router=no,cluster=yes,server=all
-    metadata: $H_METADATA
+    metadata: region=ua,deis=yes,router=yes,cluster=no,server=vmware02
     etcd_request_timeout: 3
 write_files:
   - path: /etc/deis-release
@@ -98,8 +101,8 @@ write_files:
   - path: /etc/environment
     permissions: '0644'
     content: |
-      COREOS_PUBLIC_IPV4=$H_IP
-      COREOS_PRIVATE_IPV4=$H_IP
+      COREOS_PUBLIC_IPV4=$2
+      COREOS_PRIVATE_IPV4=$3
   - path: /etc/resolv.conf
     permissions: '0644'
     content: |
@@ -150,6 +153,7 @@ write_files:
       restrict [::1]
 ssh_authorized_keys:
   - $KEY_PUB
+manage_etc_hosts: localhost
 EOF
 
 echo "Generate cloud-config/${H_NAME}.yml ..."

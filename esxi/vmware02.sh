@@ -1,4 +1,5 @@
-VM_SSH="root@192.168.1.107"
+VM_SSH="root@109.237.88.251"
+# VM_SSH="root@192.168.1.107"
 VM_HOST_NAME="vmware02"
 
 # Path of Datastore to store CoreOS

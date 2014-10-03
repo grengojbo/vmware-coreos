@@ -33,6 +33,12 @@ mkdir -p ${DATASTORE_PATH}/${VM_NAME}
 
 if [[ ! -z $3 ]]; then
   echo "Cache image ${COREOS_CH} CoreOS enable."
+  if [[ $3 == "clean" ]]; then
+    if [[ -f ${COREOS_CH}_coreos.zip ]]; then
+      echo "Delete ${COREOS_CH}_coreos.zip ..."
+      rm ${COREOS_CH}_coreos.zip
+    fi
+  fi
   if [[ ! -f ${COREOS_CH}_coreos.zip ]]; then
     echo "Download CoreOS ..." 
     wget ${CORE_OS_DOWNLOAD_URL}
