@@ -58,7 +58,7 @@ unzip coreos_production_vmware_insecure.zip
 rm -f coreos_production_vmware_insecure.zip
 
 # Convert VMDK from 2gbsparse from hosted products to Thin
-vmkfstools -i coreos_production_vmware_insecure_image.vmdk -d thin coreos.vmdk
+vmkfstools -i coreos_production_vmware_insecure_image.vmdk -d thin  coreos.vmdk
 
 # Remove the original 2gbsparse VMDKs
 rm coreos_production_vmware_insecure_image*.vmdk
@@ -69,11 +69,14 @@ sed -i 's/coreos_production_vmware_insecure_image.vmdk/coreos.vmdk/g' coreos_pro
 # Update CoreOS VMX w/new VM Name
 sed -i "s/displayName.*/displayName = \"${VM_NAME}\"/g" coreos_production_vmware_insecure.vmx
 
+sed -i "s/usb\.present.*/usb\.present = \"FALSE\"/g" coreos_production_vmware_insecure.vmx
+# usb.present = "TRUE"
 # Update memory 2048 = 2Gb
 if [[ ! -z ${H_RAM} ]]; then
-sed -i "s/memSize.*/memSize = \"${H_RAM}\"/g" coreos_production_vmware_insecure.vmx
+  # sed -i "s/memSize.*/memSize = \"${H_RAM}\"/g" coreos_production_vmware_insecure.vmx
+  sed -i "s/memsize.*/memsize = \"${H_RAM}\"/g" coreos_production_vmware_insecure.vmx
 fi
-
+#usb.present = "TRUE"
 # Update CoreOS VMX to map to VM Network
 echo "ethernet0.networkName = \"${VM_NETWORK}\"" >> coreos_production_vmware_insecure.vmx
 echo "ethernet0.virtualDev= \"${VM_INT}\"" >> coreos_production_vmware_insecure.vmx
@@ -81,14 +84,28 @@ if [[ ! -z ${H_MAC} ]]; then
   sed -i "s/ethernet0.addressType = \"generated\"/ethernet0.addressType = \"static\"/g" coreos_production_vmware_insecure.vmx
   echo "ethernet0.address = \"${H_MAC}\"" >> coreos_production_vmware_insecure.vmx
 fi
+echo "pciBridge0.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge4.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge4.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge4.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge5.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge5.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge5.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge6.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge6.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge6.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge7.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge7.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
+echo "pciBridge7.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
 
-# Register CoreOS VM which returns VM ID
-VM_ID=$(vim-cmd solo/register ${DATASTORE_PATH}/${VM_NAME}/coreos_production_vmware_insecure.vmx)
 
 # Guest Host Disk size
 if [[ ! -z ${H_DISK} ]]; then
-  vmkfstools -X ${H_DISK}g ${DATASTORE_PATH}/${VM_NAME}/coreos.vmdk
+vmkfstools -X ${H_DISK}g ${DATASTORE_PATH}/${VM_NAME}/coreos.vmdk
 fi
+
+# Register CoreOS VM which returns VM ID
+VM_ID=$(vim-cmd solo/register ${DATASTORE_PATH}/${VM_NAME}/coreos_production_vmware_insecure.vmx)
 
 # Upgrade CoreOS Virtual Hardware from 4 to 9
 vim-cmd vmsvc/upgrade ${VM_ID} vmx-09

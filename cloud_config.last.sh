@@ -35,25 +35,29 @@ coreos:
         Type=oneshot
         ExecStart=/usr/bin/systemctl stop update-engine.service
         ExecStartPost=/usr/bin/systemctl mask update-engine.service
-    - name: stop-locksmithd.service
+    - name: docker-tcp.socket
+      command: start
+      enable: yes
+      content: |
+        [Unit]
+        Description=Docker Socket for the API
+
+        [Socket]
+        ListenStream=2375
+        BindIPv6Only=both
+        Service=docker.service
+
+        [Install]
+        WantedBy=sockets.target
+    - name: enable-docker-tcp.service
       command: start
       content: |
         [Unit]
-        Description=stop locksmithd.service
-        
-        [Service]
-        Type=oneshot
-        ExecStart=/usr/bin/systemctl stop locksmithd.service
-        ExecStartPost=/usr/bin/systemctl mask locksmithd.service
-    - name: install-deisctl.service
-      command: start
-      content: |
-        [Unit]
-        Description=Install deisctl utility
+        Description=Enable the Docker Socket for the API
 
         [Service]
         Type=oneshot
-        ExecStart=/usr/bin/sh -c 'curl -sSL  --retry 5 --retry-delay 2 http://deis.io/deisctl/install.sh | sh -s 0.15.0'
+        ExecStart=/usr/bin/systemctl enable docker-tcp.socket
     - name: settimezone.service
       command: start
       content: |
@@ -64,23 +68,6 @@ coreos:
         ExecStart=/usr/bin/timedatectl set-timezone $H_TZ
         RemainAfterExit=yes
         Type=oneshot
-    - name: vmtoolsd.service
-      command: start
-      content: |
-        [Unit]
-        Description=VMware Tools Agent
-        Documentation=http://open-vm-tools.sourceforge.net/
-        ConditionVirtualization=vmware
-
-        [Service]
-        ExecStartPre=/usr/bin/ln -sfT /usr/share/oem/vmware-tools /etc/vmware-tools
-        ExecStart=/usr/share/oem/bin/vmtoolsd
-        TimeoutStopSec=5
-  oem:
-    bug-report-url: "https://github.com/coreos/bugs/issues"
-    id: vmware
-    name: VMWare
-    version-id: "9.4.6.1770165"
   etcd:
     name: $H_NAME
     # generate a new token for each unique cluster from https://discovery.etcd.io/new
@@ -88,13 +75,13 @@ coreos:
     # discovery: https://discovery.etcd.io/12345693838asdfasfadf13939923
     discovery: $DISCOVERY_TOKEN
     addr: $H_IP:4001
-    #bind-addr: 0.0.0.0
+    #bind-addr: 0.0.0.0:4001
     peer-addr: $H_IP:7001
     # give etcd more time if it's under heavy load - prevent leader election thrashing
     peer-election-timeout: 2000
     # heartbeat interval should ideally be 1/4 or 1/5 of peer election timeout, but that's a long time...
     peer-heartbeat-interval: 500
-    # snapshot-count: 5000
+    snapshot-count: 5000
   fleet:
     # We have to set the public_ip here so this works on Vagrant -- otherwise, Vagrant VMs
     # will all publish the same private IP. This is harmless for cloud providers.
@@ -107,7 +94,7 @@ coreos:
 write_files:
   - path: /etc/deis-release
     content: |
-      DEIS_RELEASE=v0.15.0
+      DEIS_RELEASE=latest
   - path: /etc/environment
     permissions: '0644'
     content: |
@@ -136,7 +123,7 @@ write_files:
       
       # if no image was set in etcd, we use the default plus the release string
       if [ \$? -ne 0 ]; then
-        RELEASE=\`etcdctl get /deis/platform/version 2>/dev/null\`
+        RELEASE=\`etcdctl get /deis/release 2>/dev/null\`
         
         # if no release was set in etcd, use the default provisioned with the server
         if [ \$? -ne 0 ]; then
@@ -149,29 +136,6 @@ write_files:
       
       # remove leading slash
       echo \${IMAGE#/}
-  - path: /opt/bin/deis-debug-logs
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-
-      echo '--- VERSIONS ---'
-      source /etc/os-release
-      echo $PRETTY_NAME
-      source /etc/deis-release
-      echo "Deis $DEIS_RELEASE"
-      etcd -version
-      fleet -version
-      printf "\n"
-
-      echo '--- SYSTEM STATUS ---'
-      journalctl -n 50 -u etcd --no-pager
-      journalctl -n 50 -u fleet --no-pager
-      printf "\n"
-
-      echo '--- DEIS STATUS ---'
-      deisctl list
-      etcdctl ls --recursive /deis
-      printf "\n"
   - path: /etc/ntp.conf
     content: |
       # Common pool

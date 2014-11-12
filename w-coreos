@@ -6,6 +6,9 @@
 # /usr/share/oem/cloud-config.yml
 # fail hard and fast even on pipelines
 # cat ~/.ssh/master.pub >> ~/.ssh/authorized_keys
+#
+# upload key to ESXI 5.1 for root user (/etc/ssh/keys-<user>/authorized_keys)
+# cat ~/.ssh/id_rsa.pub | ssh root@IP "cat >> /etc/ssh/keys-root/authorized_keys"
 set -eo pipefail
 
 help() {
@@ -37,6 +40,84 @@ mkdir -p ./keys
 mkdir -p ./cloud-config
 mkdir -p ./esxi
 mkdir -p ./host
+
+sshGet () {
+  H_IP=${1}
+  SSH_COMMAND=${3}
+  if [[ -z ${2} ]]; then
+    # echo "User key no set :("
+    KEYF=insecure_ssh_key
+  else
+    if [[ ! -f ${2} ]]; then
+      # echo "File no exits :( ${2}"
+      KEYF=insecure_ssh_key
+    else  
+      # echo "User key set :)"
+      KEYF=${2}
+    fi
+  fi
+  ssh -i ${KEYF} -o StrictHostKeyChecking=no core@${H_IP} -C ${SSH_COMMAND}
+}
+
+deployTools () {
+  H_IP=${1}
+  KEY_FILE=${2}
+  TOOLS=${3}
+  VT=vmtools-install.sh
+  if [[ ! -z ${TOOLS} ]]; then
+    if [[ -f ${TOOLS} ]]; then
+      echo "Deploy VMware tools to $H_IP ..."
+      sshGet ${H_IP} ${KEY_FILE} "sudo chown core.core -R /home/core"
+      scp -i ${KEY_FILE}  -o StrictHostKeyChecking=no ${TOOLS} core@${H_IP}:/home/core/${TOOLS}
+      scp -i ${KEY_FILE}  -o StrictHostKeyChecking=no ${VT} core@${H_IP}:/home/core/${Vt}
+      if [[ -f libdnet.so.1.0.1 ]]; then
+        scp -i ${KEY_FILE}  -o StrictHostKeyChecking=no libdnet.so.1.0.1 core@${H_IP}:/home/core/libdnet.so.1.0.1
+      fi
+      sshGet ${H_IP} ${KEY_FILE} "/home/core/${VT} ${TOOLS}"
+      sshGet ${H_IP} ${KEY_FILE} "sudo rm -f /home/core/${VT}"
+      sshGet ${H_IP} ${KEY_FILE} "sudo rm -f /home/core/${TOOLS}"
+      sshGet ${H_IP} ${KEY_FILE} "sudo chown core.core -R /home/core"
+    else
+      echo "No such file: ${1}"
+    fi
+  else
+    echo "Deploy VMware tools disable."
+  fi
+}
+
+deployKey () {
+  H_IP=${1}
+  KEY_FILE=${2}
+  if [[ -z ${KEY_FILE} ]]; then
+    echo "Deploy key: insecure_ssh_key"
+    scp -i insecure_ssh_key insecure_ssh_key core@${H_IP}:/home/core/.ssh/id_rsa
+  else
+    echo "Deploy key: ${KEY_FILE}"
+    scp -i insecure_ssh_key ${KEY_FILE} core@${H_IP}:/home/core/.ssh/id_rsa
+  fi
+}
+
+deployConfig () {
+  H_IP=${1}
+  KEY_FILE=${2}
+  H_NAME=${3}
+  if [[ ! -f cloud-config/${H_NAME}.yml ]]; then
+    echo "File: cloud-config/${H_NAME}.yml not exits..."
+    exit 1
+  fi
+  echo "Connect to ${H_IP} ..."
+  # SSH_GET="ssh -i insecure_ssh_key -o StrictHostKeyChecking=no core@${H_IP}"
+  sshGet ${H_IP} ${KEY_FILE} "sudo mkdir -p /storage"
+  echo "Deploy /usr/share/oem/cloud-config.yml ..."
+  # cat cloud-config/${H_NAME}.yml | ${SSH_GET} "cat > /home/core/${H_NAME}.yml"
+  sshGet ${H_IP} ${KEY_FILE} "sudo chown core.core -R /home/core"
+  cat cloud-config/${H_NAME}.yml | sshGet ${H_IP} ${KEY_FILE} "cat > /home/core/${H_NAME}.yml"
+  # echo debig 1
+  sshGet ${H_IP} ${KEY_FILE} "sudo cp /usr/share/oem/cloud-config.yml /home/core/old.yml"
+  # echo debig 2
+  sshGet ${H_IP} ${KEY_FILE} "sudo mv /home/core/${H_NAME}.yml /usr/share/oem/cloud-config.yml"
+  # echo debig 3
+}
 
 if [[ ! -f ./keys/token ]]; then
   echo "Generate token keys/token ..."
@@ -108,24 +189,14 @@ if [[ $1 == "deploy" ]]; then
   if [[ ! -f insecure_ssh_key ]]; then
     scp ${VM_SSH}:${DATASTORE_PATH}/${H_NAME}/insecure_ssh_key ./
   fi
-  if [[ ! -f cloud-config/${H_NAME}.yml ]]; then
-    echo "File: cloud-config/${H_NAME}.yml not exits..."
-    exit 1
-  fi
-  echo "Connect to ${H_IP} ..."
-  SSH_GET="ssh -i insecure_ssh_key -o StrictHostKeyChecking=no core@${H_IP}"
-  ${SSH_GET} -C "sudo mkdir -p /storage"
-  echo "Deploy /usr/share/oem/cloud-config.yml ..."
-  cat cloud-config/${H_NAME}.yml | ${SSH_GET} "cat > /home/core/${H_NAME}.yml"
-  ${SSH_GET} -C "sudo mv /home/core/${H_NAME}.yml /usr/share/oem/cloud-config.yml"
-  if [[ ! -z ${KEY_FILE} ]]; then
-    scp -i insecure_ssh_key insecure_ssh_key core@${H_IP}:/home/core/.ssh/id_rsa
-  else
-    scp -i insecure_ssh_key ${KEY_FILE} core@${H_IP}:/home/core/.ssh/id_rsa
-  fi
-  ${SSH_GET} -C "sudo cp -R /home/core/.ssh /root/"
+  deployKey ${H_IP} ${KEY_FILE}
+  deployConfig ${H_IP} insecure_ssh_key ${H_NAME}
+  sshGet ${H_IP} insecure_ssh_key "sudo cp -R /home/core/.ssh /root/"
+  # echo deploy tools
+  deployTools ${H_IP} insecure_ssh_key ${TOOLS}
   echo "Reboot ${H_IP}"
-  ${SSH_GET} -C "sudo reboot"
+  sshGet ${H_IP} insecure_ssh_key "sudo reboot"
+  # sshGet ${H_IP} ${KEY_FILE} "sudo reboot"
   # systemctl stop system-cloudinit@usr-share-oem-cloud\x2dconfig.yml.service
   exit 1
 fi
@@ -141,25 +212,10 @@ if [[ $1 == "update" ]]; then
     exit 1
   fi
   source ${HF}
-  if [[ ! -f cloud-config/${H_NAME}.yml ]]; then
-    echo "File: cloud-config/${H_NAME}.yml not exits..."
-    exit 1
-  fi
-  if [[ -f ${KEY_FILE} ]]; then
-    echo "Connect to ${H_IP}, key: ${KEY_FILE} ..."
-    SSH_GET="ssh -i ${KEY_FILE} -o StrictHostKeyChecking=no core@${H_IP}"
-    # SCP_GET="scp -i ${KEY_FILE}"
-  else
-    echo "Connect to ${H_IP} ..."
-    SSH_GET="ssh -o StrictHostKeyChecking=no core@${H_IP}"
-    # SCP_GET="scp"
-  fi
-  cat cloud-config/${H_NAME}.yml | ${SSH_GET} "sudo cat > /usr/share/oem/cloud-config.yml"
-  # ${SCP_GET} cloud-config/${H_NAME}.yml core@${H_IP}:/home/core/${H_NAME}.yml
-  # echo "Deploy /usr/share/oem/cloud-config.yml ..."
-  # ${SSH_GET} -C "sudo mv /home/core/${H_NAME}.yml /usr/share/oem/cloud-config.yml"
+  deployConfig ${H_IP} ${KEY_FILE} ${H_NAME}
+  deployTools ${H_IP} ${KEY_FILE}  ${TOOLS}
   echo "Reboot ${H_IP}"
-  ${SSH_GET} -C "sudo reboot"
+  sshGet ${H_IP} ${KEY_FILE} "sudo reboot"
   exit 1
 fi
 
@@ -228,13 +284,7 @@ if [[ $1 == "toolbox" ]]; then
     exit 1
   fi
   source ${HF}
-  if [[ -f ${KEY_FILE} ]]; then
-    echo "Connect to ${H_IP}, key: ${KEY_FILE} ..."
-    ssh -i ${KEY_FILE} -o StrictHostKeyChecking=no core@${H_IP} -C "/usr/bin/toolbox"
-  else
-    echo "Connect to ${H_IP} ..."
-    ssh -o StrictHostKeyChecking=no core@${H_IP} -C "/usr/bin/toolbox"
-  fi
+  sshGet ${H_IP} ${KEY_FILE} "/usr/bin/toolbox"
   exit 1
 fi
 
