@@ -51,7 +51,7 @@ sshGet () {
     if [[ ! -f ${2} ]]; then
       # echo "File no exits :( ${2}"
       KEYF=insecure_ssh_key
-    else  
+    else
       # echo "User key set :)"
       KEYF=${2}
     fi
@@ -135,7 +135,7 @@ if [[ $1 == "install" ]]; then
     echo "CoreOS Host is not set."
     exit 1
   fi
-  
+
   WF=${2}
   HF=${3}
   if [[ ! -f $WF ]]; then
@@ -164,9 +164,9 @@ if [[ $1 == "install" ]]; then
   echo "" >> ${HF}
   echo "ESXI=\"${WF}\"" >> ${HF}
   echo "VM_ID=${VM_ID}" >> ${HF}
-  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${VM_HOST_NAME}.sh"  
-  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${H_NAME}.sh"  
-  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/coreos_deploy_on_esxi.sh"  
+  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${VM_HOST_NAME}.sh"
+  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/${H_NAME}.sh"
+  ssh ${VM_SSH} -C "rm ${DATASTORE_PATH}/coreos_deploy_on_esxi.sh"
   exit 1
 fi
 
@@ -267,8 +267,13 @@ if [[ $1 == "ssh" ]]; then
     echo "Connect to ${H_IP}, key: ${KEY_FILE} ..."
     ssh -i ${KEY_FILE} -o StrictHostKeyChecking=no core@${H_IP}
   else
-    echo "Connect to ${H_IP} ..."
-    ssh -o StrictHostKeyChecking=no core@${H_IP}
+    if [[ -f ./insecure_ssh_key ]]; then
+      echo "Connect to ${H_IP}, key: insecure_ssh_key ..."
+      ssh -i ./insecure_ssh_key -o StrictHostKeyChecking=no core@${H_IP}
+    else
+      echo "Connect to ${H_IP} ..."
+      ssh -o StrictHostKeyChecking=no core@${H_IP}
+    fi
   fi
   exit 1
 fi

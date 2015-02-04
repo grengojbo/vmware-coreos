@@ -40,11 +40,11 @@ if [[ ! -z $3 ]]; then
     fi
   fi
   if [[ ! -f ${COREOS_CH}_coreos.zip ]]; then
-    echo "Download CoreOS ..." 
+    echo "Download CoreOS ..."
     wget ${CORE_OS_DOWNLOAD_URL}
     mv coreos_production_vmware_insecure.zip ${COREOS_CH}_coreos.zip
   fi
-  cp ${COREOS_CH}_coreos.zip ${DATASTORE_PATH}/${VM_NAME}/coreos_production_vmware_insecure.zip 
+  cp ${COREOS_CH}_coreos.zip ${DATASTORE_PATH}/${VM_NAME}/coreos_production_vmware_insecure.zip
 else
   cd ${DATASTORE_PATH}/${VM_NAME}
   echo "Cache image ${COREOS_CH} CoreOS disable."
@@ -79,24 +79,26 @@ fi
 #usb.present = "TRUE"
 # Update CoreOS VMX to map to VM Network
 echo "ethernet0.networkName = \"${VM_NETWORK}\"" >> coreos_production_vmware_insecure.vmx
-echo "ethernet0.virtualDev= \"${VM_INT}\"" >> coreos_production_vmware_insecure.vmx
+#echo "ethernet0.virtualDev= \"${VM_INT}\"" >> coreos_production_vmware_insecure.vmx
 if [[ ! -z ${H_MAC} ]]; then
   sed -i "s/ethernet0.addressType = \"generated\"/ethernet0.addressType = \"static\"/g" coreos_production_vmware_insecure.vmx
   echo "ethernet0.address = \"${H_MAC}\"" >> coreos_production_vmware_insecure.vmx
 fi
-echo "pciBridge0.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge4.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge4.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge4.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge5.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge5.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge5.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge6.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge6.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge6.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge7.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge7.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
-echo "pciBridge7.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
+
+# OLD coreos
+# echo "pciBridge0.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge4.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge4.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge4.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge5.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge5.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge5.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge6.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge6.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge6.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge7.present = \"TRUE\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge7.virtualDev = \"pcieRootPort\"" >> coreos_production_vmware_insecure.vmx
+# echo "pciBridge7.functions = \"8\"" >> coreos_production_vmware_insecure.vmx
 
 
 # Guest Host Disk size

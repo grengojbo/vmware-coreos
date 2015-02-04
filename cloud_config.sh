@@ -30,7 +30,7 @@ coreos:
       content: |
         [Unit]
         Description=stop update-engine
-        
+
         [Service]
         Type=oneshot
         ExecStart=/usr/bin/systemctl stop update-engine.service
@@ -40,7 +40,7 @@ coreos:
       content: |
         [Unit]
         Description=stop locksmithd.service
-        
+
         [Service]
         Type=oneshot
         ExecStart=/usr/bin/systemctl stop locksmithd.service
@@ -53,7 +53,7 @@ coreos:
 
         [Service]
         Type=oneshot
-        ExecStart=/usr/bin/sh -c 'curl -sSL  --retry 5 --retry-delay 2 http://deis.io/deisctl/install.sh | sh -s 0.15.0'
+        ExecStart=/usr/bin/sh -c 'curl -sSL  --retry 5 --retry-delay 2 http://deis.io/deisctl/install.sh | sh -s 1.0.0'
     - name: settimezone.service
       command: start
       content: |
@@ -107,7 +107,7 @@ coreos:
 write_files:
   - path: /etc/deis-release
     content: |
-      DEIS_RELEASE=v0.15.0
+      DEIS_RELEASE=v1.0.0
   - path: /etc/environment
     permissions: '0644'
     content: |
@@ -125,7 +125,8 @@ write_files:
     permissions: '0755'
     content: |
       function nse() {
-        sudo nsenter --pid --uts --mount --ipc --net --target \$(docker inspect --format="{{ .State.Pid }}" \$1)
+        # sudo nsenter --pid --uts --mount --ipc --net --target \$(docker inspect --format="{{ .State.Pid }}" \$1)
+        docker exec -it \$1 bash
       }
   - path: /run/deis/bin/get_image
     permissions: '0755'
@@ -133,20 +134,20 @@ write_files:
       #!/bin/bash
       # usage: get_image <component_path>
       IMAGE=\`etcdctl get \$1/image 2>/dev/null\`
-      
+
       # if no image was set in etcd, we use the default plus the release string
       if [ \$? -ne 0 ]; then
         RELEASE=\`etcdctl get /deis/platform/version 2>/dev/null\`
-        
+
         # if no release was set in etcd, use the default provisioned with the server
         if [ \$? -ne 0 ]; then
           source /etc/deis-release
           RELEASE=\$DEIS_RELEASE
         fi
-        
+
         IMAGE=\$1:\$RELEASE
       fi
-      
+
       # remove leading slash
       echo \${IMAGE#/}
   - path: /opt/bin/deis-debug-logs
@@ -172,6 +173,12 @@ write_files:
       deisctl list
       etcdctl ls --recursive /deis
       printf "\n"
+  - path: /home/core/.toolboxrc
+    owner: core
+    content: |
+      TOOLBOX_DOCKER_IMAGE=ubuntu-debootstrap
+      TOOLBOX_DOCKER_TAG=14.04
+      TOOLBOX_USER=root
   - path: /etc/ntp.conf
     content: |
       # Common pool
