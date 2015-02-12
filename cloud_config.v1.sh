@@ -120,6 +120,103 @@ coreos:
 
         [Install]
         WantedBy=multi-user.target
+    - name: deis-store-monitor.service
+      command: stop
+      content: |
+        [Unit]
+        Description=deis-store-monitor
+
+        [Service]
+        EnvironmentFile=/etc/environment
+        TimeoutStartSec=5m
+        ExecStartPre=/bin/sh -c "docker inspect deis-store-monitor-data >/dev/null 2>&1 || docker run --name deis-store-monitor-data -v /etc/ceph -v /var/lib/ceph/mon ubuntu-debootstrap:14.04 /bin/true"
+        ExecStartPre=-/usr/bin/docker kill deis-store-monitor
+        ExecStartPre=-/usr/bin/docker rm -f deis-store-monitor
+        ExecStartPre=/bin/sh -c "etcdctl set /deis/store/hosts/\$COREOS_PRIVATE_IPV4 ${H_NAME} >/dev/null"
+        ExecStart=/usr/bin/docker run --name deis-store-monitor --rm --volumes-from=deis-store-monitor-data -e HOST=\$COREOS_PRIVATE_IPV4 -p 6789 --net host deis/store-monitor:\${DEIS_RELEASE}
+        ExecStopPost=-/usr/bin/docker rm -f deis-store-monitor
+        Restart=on-failure
+        RestartSec=5
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: deis-store-daemon.service
+      command: stop
+      content: |
+        [Unit]
+        Description=deis-store-daemon
+
+        [Service]
+        EnvironmentFile=/etc/environment
+        TimeoutStartSec=5m
+        ExecStartPre=/bin/sh -c "docker inspect deis-store-daemon-data >/dev/null 2>&1 || docker run --name deis-store-daemon-data -v /var/lib/ceph/osd ubuntu-debootstrap:14.04 /bin/true"
+        ExecStartPre=-/usr/bin/docker kill deis-store-daemon
+        ExecStartPre=-/usr/bin/docker rm -f deis-store-daemon
+        ExecStartPre=/usr/bin/sleep 10
+        ExecStart=/usr/bin/docker run --name deis-store-daemon --volumes-from=deis-store-daemon-data --rm -e HOST=\$COREOS_PRIVATE_IPV4 -p 6800 --net host deis/store-daemon:\${DEIS_RELEASE}
+        ExecStopPost=-/usr/bin/docker rm -f deis-store-daemon
+        Restart=on-failure
+        RestartSec=5
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: deis-store-metadata.service
+      command: stop
+      content: |
+        [Unit]
+        Description=deis-store-metadata
+
+        [Service]
+        EnvironmentFile=/etc/environment
+        TimeoutStartSec=5m
+        ExecStartPre=-/usr/bin/docker kill deis-store-metadata
+        ExecStartPre=-/usr/bin/docker rm -f deis-store-metadata
+        ExecStart=/usr/bin/docker run --name deis-store-metadata --rm -e HOST=\$COREOS_PRIVATE_IPV4 --net host deis/store-metadata:\${DEIS_RELEASE}
+        ExecStopPost=-/usr/bin/docker stop deis-store-metadata
+        Restart=on-failure
+        RestartSec=5
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: deis-store-gateway.service
+      command: stop
+      content: |
+        [Unit]
+        Description=deis-store-gateway
+
+        [Service]
+        EnvironmentFile=/etc/environment
+        TimeoutStartSec=5m
+        ExecStartPre=-/usr/bin/docker kill deis-store-gateway
+        ExecStartPre=-/usr/bin/docker rm -f deis-store-gateway
+        ExecStart=/usr/bin/docker run --name deis-store-gateway -h deis-store-gateway --rm -e HOST=\$COREOS_PRIVATE_IPV4 -e EXTERNAL_PORT=8888 -p 8888:8888 deis/store-gateway:\${DEIS_RELEASE}
+        ExecStartPost=/bin/sh -c "until (echo 'Waiting for ceph gateway on 8888/tcp...' && curl -sSL http://localhost:8888|grep -e '<ID>anonymous</ID><DisplayName></DisplayName>' >/dev/null 2>&1); do sleep 1; done"
+        ExecStopPost=-/usr/bin/docker rm -f deis-store-gateway
+        Restart=on-failure
+        RestartSec=5
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: deis-store-volume.service
+      command: stop
+      content: |
+        [Unit]
+        Description=deis-store-volume
+
+        [Service]
+        EnvironmentFile=/etc/environment
+        TimeoutStartSec=5m
+        ExecStartPre=/usr/bin/mkdir -p /var/lib/deis/store/nodes
+        ExecStartPre=/bin/sh -c "echo waiting for store-monitor... && until etcdctl get /deis/store/monSetupComplete >/dev/null 2>&1; do sleep 2; done"
+        ExecStartPre=/bin/bash -c "HOSTS=\`etcdctl ls /deis/store/hosts | cut -d/ -f5 | awk '{if(NR == 1) {printf \$0} else {printf \",\"\$0}}'\` && cat /proc/mounts |grep '/var/lib/deis/store' || mount -t ceph \$HOSTS:/ /var/lib/deis/store -o name=admin,secret=\`etcdctl get /deis/store/adminKeyring | grep 'key =' | cut -d' ' -f3\`"
+        ExecStart=/usr/bin/tail -f /dev/null
+        ExecStartPost=/bin/sh -c "test -d /var/lib/deis/store/logs || mkdir -p /var/lib/deis/store/logs"
+        ExecStopPost=-/usr/bin/umount /var/lib/deis/store
+        Restart=on-failure
+        RestartSec=5
+
+        [Install]
+        WantedBy=multi-user.target
     - name: deis-store-admin.service
       command: stop
       content: |
@@ -138,31 +235,17 @@ coreos:
 
         [Install]
         WantedBy=multi-user.target
-    - name: vmtoolsd.service
-      command: ${H_TOOLS}
-      content: |
-        [Unit]
-        Description=VMware Tools Agent
-        Documentation=http://open-vm-tools.sourceforge.net/
-        ConditionVirtualization=vmware
-
-        [Service]
-        ExecStartPre=/usr/bin/ln -sfT /usr/share/oem/vmware-tools /etc/vmware-tools
-        ExecStart=/usr/share/oem/bin/vmtoolsd
-        TimeoutStopSec=5
-  oem:
-    bug-report-url: "https://github.com/coreos/bugs/issues"
-    id: vmware
-    name: VMWare
-    version-id: "9.4.6.1770165"
 write_files:
   - path: /etc/deis-release
     content: |
-      DEIS_RELEASE=v${H_VER}
+      DEIS_RELEASE=v1.3.1
+  - path: /etc/motd
+    content: " \e[31m* *    \e[34m*   \e[32m*****    \e[39mddddd   eeeeeee iiiiiii   ssss\n\e[31m*   *  \e[34m* *  \e[32m*   *     \e[39md   d   e    e    i     s    s\n \e[31m* *  \e[34m***** \e[32m*****     \e[39md    d  e         i    s\n\e[32m*****  \e[31m* *    \e[34m*       \e[39md     d e         i     s\n\e[32m*   * \e[31m*   *  \e[34m* *      \e[39md     d eee       i      sss\n\e[32m*****  \e[31m* *  \e[34m*****     \e[39md     d e         i         s\n  \e[34m*   \e[32m*****  \e[31m* *      \e[39md    d  e         i          s\n \e[34m* *  \e[32m*   * \e[31m*   *     \e[39md   d   e    e    i    s    s\n\e[34m***** \e[32m*****  \e[31m* *     \e[39mddddd   eeeeeee iiiiiii  ssss\n\n\e[39mWelcome to Deis\t\t\tPowered by Core\e[38;5;45mO\e[38;5;206mS\e[39m\n"
   - path: /etc/profile.d/nse-function.sh
     permissions: '0755'
     content: |
       function nse() {
+        # sudo nsenter --pid --uts --mount --ipc --net --target \$(docker inspect --format="{{ .State.Pid }}" \$1)
         docker exec -it \$1 bash
       }
   - path: /etc/systemd/system/docker.service.d/50-insecure-registry.conf
@@ -265,11 +348,11 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      VER="v${H_VER}"
-      HID=${H_ID}
-      /bin/sh -c "sysctl -w net.netfilter.nf_conntrack_max=262144"
+      VER="v1.3.1"
+      HID=1
       deisctl config platform set sshPrivateKey=~/.ssh/id_rsa
       deisctl config platform set domain=local3.uatv.me
+      deisctl config router set bodySize=100m
       deisctl refresh-units
       docker pull ubuntu-debootstrap:14.04
       docker pull deis/store-monitor:\${VER}
@@ -281,8 +364,8 @@ write_files:
 
       docker pull deis/logspout:\${VER}
       docker pull deis/publisher:\${VER}
-      docker pull deis/registry:\${VER}
-      docker pull deis/router:\${VER}
+      docker pull deis/registry@\${HID}:\${VER}
+      docker pull deis/router@\${HID}:\${VER}
 
       docker pull deis/controller:\${VER}
 
@@ -291,15 +374,6 @@ write_files:
       docker pull deis/database:\${VER}
       docker pull deis/controller:\${VER}
       docker pull deis/builder:\${VER}
-
-      deisctl install platform
-      deisctl start store-monitor
-      deisctl start store-daemon
-      deisctl start store-metadata
-      deisctl start store-gateway
-      deisctl start store-volume
-      deisctl start router
-      deisctl config router set bodySize=100m
 ssh_authorized_keys:
   - $KEY_PUB
 

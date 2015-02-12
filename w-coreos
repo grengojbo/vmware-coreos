@@ -188,6 +188,7 @@ if [[ $1 == "deploy" ]]; then
   source ${ESXI}
   if [[ ! -f insecure_ssh_key ]]; then
     scp ${VM_SSH}:${DATASTORE_PATH}/${H_NAME}/insecure_ssh_key ./
+    chmod 0600 ./insecure_ssh_key
   fi
   deployKey ${H_IP} ${KEY_FILE}
   deployConfig ${H_IP} insecure_ssh_key ${H_NAME}

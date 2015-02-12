@@ -59,16 +59,39 @@ coreos:
         [Service]
         Type=oneshot
         ExecStart=/usr/bin/sh -c 'curl -sSL --retry 5 --retry-delay 2 http://deis.io/deisctl/install.sh | sh -s 1.3.1'
-    - name: fleet.socket
+    - name: ntpdate.service
+      command: start
+    - name: timedate-ntp-synchronization.service
       command: start
       content: |
-        [Socket]
-        # Talk to the API over a Unix domain socket (default)
-        ListenStream=/var/run/fleet.sock
-        Service=fleet.service
+        [Unit]
+        Description=Synchronize system clock
+        After=ntpdate.service
 
-        [Install]
-        WantedBy=sockets.target
+        [Service]
+        ExecStart=/usr/bin/timedatectl set-timezone $H_TZ
+        ExecStart=/usr/bin/timedatectl set-ntp true
+        ExecStart=/sbin/hwclock --systohc --localtime
+        RemainAfterExit=yes
+        Type=oneshot
+    - name: debug-etcd.service
+      content: |
+        [Unit]
+        Description=etcd debugging service
+
+        [Service]
+        ExecStartPre=/usr/bin/curl -sSL -o /opt/bin/jq http://stedolan.github.io/jq/download/linux64/jq
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/jq
+        ExecStart=/usr/bin/bash -c "while true; do curl -sL http://127.0.0.1:4001/v2/stats/leader | /opt/bin/jq . ; sleep 1 ; done"
+    - name: increase-nf_conntrack-connections.service
+      command: start
+      content: |
+        [Unit]
+        Description=Increase the number of connections in nf_conntrack. default is 65536
+
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/sh -c "sysctl -w net.netfilter.nf_conntrack_max=262144"
     - name: stop-locksmithd.service
       command: start
       content: |
@@ -79,25 +102,24 @@ coreos:
         Type=oneshot
         ExecStart=/usr/bin/systemctl stop locksmithd.service
         ExecStartPost=/usr/bin/systemctl mask locksmithd.service
-    - name: install-deisctl.service
+    - name: newrelic-sysmond.service
       command: start
       content: |
         [Unit]
-        Description=Install deisctl utility
+        Description=newrelic-sysmond
 
         [Service]
-        Type=oneshot
-        ExecStart=/usr/bin/sh -c 'curl -sSL  --retry 5 --retry-delay 2 http://deis.io/deisctl/install.sh | sh -s 1.0.0'
-    - name: settimezone.service
-      command: start
-      content: |
-        [Unit]
-        Description=Set the timezone
+        EnvironmentFile=/etc/environment
+        TimeoutStartSec=20m
+        ExecStartPre=/bin/sh -c "docker history johanneswuerbach/newrelic-sysmond >/dev/null || docker pull johanneswuerbach/newrelic-sysmond"
+        ExecStartPre=/bin/sh -c "docker inspect newrelic-sysmond >/dev/null && docker rm -f newrelic-sysmond || true"
+        ExecStart=/usr/bin/docker run --rm --name newrelic-sysmond -e NEW_RELIC_LICENSE_KEY=a82992231e24ac9730b2f18a1ced01cb05adea99 -e CUSTOM_HOSTNAME=%H johanneswuerbach/newrelic-sysmond
+        ExecStopPost=-/usr/bin/docker stop newrelic-sysmond
+        Restart=on-failure
+        RestartSec=5
 
-        [Service]
-        ExecStart=/usr/bin/timedatectl set-timezone $H_TZ
-        RemainAfterExit=yes
-        Type=oneshot
+        [Install]
+        WantedBy=multi-user.target
     - name: vmtoolsd.service
       command: start
       content: |
@@ -118,18 +140,7 @@ coreos:
 write_files:
   - path: /etc/deis-release
     content: |
-      DEIS_RELEASE=v1.0.0
-  - path: /etc/environment
-    permissions: '0644'
-    content: |
-      COREOS_PUBLIC_IPV4=$H_IP
-      COREOS_PRIVATE_IPV4=$H_IP
-  - path: /etc/resolv.conf
-    permissions: '0644'
-    content: |
-      nameserver $C_NAMESERVER
-      domain $H_DOMAIN
-      options single-request
+      DEIS_RELEASE=v1.3.1
   - path: /etc/motd
     content: " \e[31m* *    \e[34m*   \e[32m*****    \e[39mddddd   eeeeeee iiiiiii   ssss\n\e[31m*   *  \e[34m* *  \e[32m*   *     \e[39md   d   e    e    i     s    s\n \e[31m* *  \e[34m***** \e[32m*****     \e[39md    d  e         i    s\n\e[32m*****  \e[31m* *    \e[34m*       \e[39md     d e         i     s\n\e[32m*   * \e[31m*   *  \e[34m* *      \e[39md     d eee       i      sss\n\e[32m*****  \e[31m* *  \e[34m*****     \e[39md     d e         i         s\n  \e[34m*   \e[32m*****  \e[31m* *      \e[39md    d  e         i          s\n \e[34m* *  \e[32m*   * \e[31m*   *     \e[39md   d   e    e    i    s    s\n\e[34m***** \e[32m*****  \e[31m* *     \e[39mddddd   eeeeeee iiiiiii  ssss\n\n\e[39mWelcome to Deis\t\t\tPowered by Core\e[38;5;45mO\e[38;5;206mS\e[39m\n"
   - path: /etc/profile.d/nse-function.sh
@@ -139,6 +150,10 @@ write_files:
         # sudo nsenter --pid --uts --mount --ipc --net --target \$(docker inspect --format="{{ .State.Pid }}" \$1)
         docker exec -it \$1 bash
       }
+  - path: /etc/systemd/system/docker.service.d/50-insecure-registry.conf
+    content: |
+      [Service]
+      Environment="DOCKER_OPTS=--insecure-registry 10.0.0.0/8 --insecure-registry 172.16.0.0/12 --insecure-registry 192.168.0.0/16 --insecure-registry 100.64.0.0/10"
   - path: /run/deis/bin/get_image
     permissions: '0755'
     content: |
@@ -168,9 +183,9 @@ write_files:
 
       echo '--- VERSIONS ---'
       source /etc/os-release
-      echo $PRETTY_NAME
+      echo \$PRETTY_NAME
       source /etc/deis-release
-      echo "Deis $DEIS_RELEASE"
+      echo "Deis \$DEIS_RELEASE"
       etcd -version
       fleet -version
       printf "\n"
@@ -190,6 +205,17 @@ write_files:
       TOOLBOX_DOCKER_IMAGE=ubuntu-debootstrap
       TOOLBOX_DOCKER_TAG=14.04
       TOOLBOX_USER=root
+  - path: /etc/environment
+    permissions: '0644'
+    content: |
+      COREOS_PUBLIC_IPV4=$H_IP
+      COREOS_PRIVATE_IPV4=$H_IP
+  - path: /etc/resolv.conf
+    permissions: '0644'
+    content: |
+      nameserver $C_NAMESERVER
+      domain $H_DOMAIN
+      options single-request
   - path: /etc/ntp.conf
     content: |
       # Common pool
@@ -202,8 +228,18 @@ write_files:
       restrict default nomodify nopeer noquery limited kod
       restrict 127.0.0.1
       restrict [::1]
+  - path: /etc/systemd/network/static.network
+    content: |
+      [Match]
+      Name=$H_ETH
+
+      [Network]
+      Address=$H_IP/$H_NET
+      Gateway=$H_GW
+      DNS=$H_DNS
 ssh_authorized_keys:
   - $KEY_PUB
+
 EOF
 
 echo "Generate cloud-config/${H_NAME}.yml ..."

@@ -52,3 +52,13 @@ $ ./w-start host/test01.sh
 $ ./w-coreos ssh host/test01.sh
 ```
 
+```bash
+deisctl config platform set sshPrivateKey=~/.ssh/id_rsa
+deisctl config platform set domain=local3.uatv.me
+deisctl install platform
+deisctl start platform
+deisctl config router set bodySize=100m
+deisctl scale registry=3
+fleetctl load /home/core/.deis/units/deis-store-admin.service
+fleetctl start deis-store-admin.service
+```
